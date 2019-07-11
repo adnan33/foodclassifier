@@ -1,0 +1,1 @@
+milk,egg,peanut,nut,soy,wheat,flour,fish,shellfish,legumes
