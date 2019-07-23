@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore")
 import base64
 import io
 from PIL import Image
@@ -13,24 +15,26 @@ from keras.models import Model
 from keras.optimizers import adam
 from keras.layers import Dense, GlobalAveragePooling2D
 import tensorflow as tf
-
 import cv2
 from keras.preprocessing.image import img_to_array
 from flask import request
 from flask import jsonify
 from flask import Flask
+from werkzeug.utils import secure_filename
 import os
 import pathlib
 import numpy as np
 import easygui as e
 
-
+app = Flask(__name__)
+upload_dir=r""
+app.config['UPLOAD_FOLDER']=upload_dir
 triggers_dir=r"triggers.txt"
 ingredients_dir=r"ingredients_simplified.txt"
 classes_dir=r"labels.txt"
 
 model_dir=r"fcx2107_FCXception-005-21_07.h5"
-img_dir=e.fileopenbox()
+
 img_dim=224
 #reading the triggers from file 
 triggers=[]
@@ -93,23 +97,51 @@ def get_top_n_acc(pred,n):
 
 print(" * Loading Keras model...")
 get_model()
-img=preprocess_image(img_dir)
-pred=model.predict(img)
-top1=pred.argmax()
-top3=get_top_n_acc(pred, 3)
-
-ing_list,c=ag_counter(top1)
-lst,d=ag_counter_topn(top3)
-print(*lst,d)
-print("the dish is ",labels[top1])
-if(c>0):
-    print(c," Allergen ingredients are present in this food.they are :",','.join(lst))
-else:
-    print("Allergen ingredients are not present in this food.")
-# for i in range(0,101):
-#     c=ag_counter(i, triggers)
-#     if(c>0):
-#         print(c," Allergen ingredients are present in this food.")
-#     else:
-#         print("Allergen ingredients are not present in this food.")
-
+@app.route("/predict", methods=["POST"])
+def predict():
+    if request.method == 'POST':
+        # check if the post request has the file part
+        if 'file' not in request.files:
+            return 'No file part'
+            return redirect(request.url)
+        file = request.files['file']
+        # if user does not select file, browser also
+        # submit a empty part without filename
+        if file.filename == '':
+            return 'No selected file'
+            return redirect(request.url)
+        if file:
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            img_dir=os.path.join(upload_dir,filename)
+            img=preprocess_image(img_dir)
+            with graph.as_default():
+                pred=model.predict(img)
+                
+            top1=pred.argmax()
+            print(top1,labels[top1])
+            top3=get_top_n_acc(pred, 3)
+            
+            ing_list,c=ag_counter(top1)
+            lst,d=ag_counter_topn(top3)
+            b=labels[top1]
+            print(*lst,d)
+            a=' '.join(lst)
+            
+            if(c>0):
+                response = {
+                    'prediction':{  
+                  'the dish is': b,
+                  'Allergen warning ': a          
+                }
+            }
+            else:
+                response = {
+                    'prediction' :
+                {
+                                    'This dish is safe to eat.'
+                }}
+            return jsonify(response)
+            
+if __name__=='__main__':
+    app.run()            
